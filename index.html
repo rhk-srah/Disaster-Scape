@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<!-- A "viewport" faz o jogo se adaptar ao tamanho da tela em celulares -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disaster Escape</title>
+
+<!-- Fontes do Google: Baloo 2 (títulos) e Nunito (textos) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Folha de estilos do jogo.
+     ATENÇÃO: vjogo.css precisa estar na MESMA PASTA deste arquivo,
+     senão o jogo abre sem nenhuma formatação. -->
+<link rel="stylesheet" href="vjogo.css">
+</head>
+<body>
+
+<!-- ==========================================================================
+     ESTRUTURA DAS TELAS
+     Todas as telas ficam escritas aqui ao mesmo tempo, mas só uma tem a
+     classe "active". A função go() (no JavaScript) troca essa classe.
+     Elementos com "id" são preenchidos pelo JavaScript durante o jogo.
+     ========================================================================== -->
+<div id="app">
+
+  <!-- ===================== TELA INICIAL ===================== -->
+  <div class="screen active" id="screen-title">
+    <div class="title-card">
+      <div class="title-main">DISASTER ESCAPE</div>
+      <div class="title-sub">Um jogo educativo sobre prevenção.</div>
+
+      <div class="menu-list">
+        <button class="menu-btn primary" onclick="go('screen-players')">Jogar</button>
+        <button class="menu-btn" onclick="openLearnList()">Aprender</button>
+        <button class="menu-btn" onclick="go('screen-achv')">Conquistas</button>
+        <button class="menu-btn" onclick="go('screen-credits')">Créditos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ESCOLHA DE 1 OU 2 JOGADORES ===================== -->
+  <div class="screen" id="screen-players">
+    <div class="subscreen players-subscreen">
+      <!-- O <span> vazio serve de espaçador para centralizar o título -->
+      <div class="topbar"><button class="back-btn" onclick="go('screen-title')">← Voltar</button><h2>Como você quer jogar?</h2><span></span></div>
+
+      <div class="choice-grid">
+        <div class="choice-card"><span class="icon">🧍</span><h3>1 Jogador</h3><p>Você controla um personagem e enfrenta o desastre sozinho.</p>
+          <button class="go-btn" style="margin-top:14px;padding:10px 20px;font-size:0.95rem;" onclick="setPlayerCount(1)">Escolher</button></div>
+        <div class="choice-card"><span class="icon">🧍🧍</span><h3>2 Jogadores</h3><p>Dois personagens, mesma missão. Cooperem para escapar em segurança.</p>
+          <button class="go-btn" style="margin-top:14px;padding:10px 20px;font-size:0.95rem;" onclick="setPlayerCount(2)">Escolher</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SELEÇÃO DE PERSONAGEM =====================
+       "charGrid" começa vazia e é montada por renderCharGrid().
+       O botão nasce desativado e só é liberado quando todos escolhem. -->
+  <div class="screen" id="screen-char">
+    <div class="subscreen" style="justify-content:center;">
+      <div class="topbar"><button class="back-btn" onclick="go('screen-players')">← Voltar</button><h2>Escolha seu personagem</h2><span></span></div>
+      <div class="content-wrap" style="overflow:visible;">
+        <div class="char-grid" id="charGrid"></div>
+        <div class="select-status" id="selectStatus">Selecione o personagem do Jogador 1.</div>
+        <button class="go-btn" id="charGoBtn" disabled onclick="go('screen-map')">Ir para o mapa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MAPA DA CIDADE ===================== -->
+  <div class="screen" id="screen-map">
+    <div class="subscreen" style="justify-content:flex-start; padding-top:22px;">
+      <div class="topbar"><button class="back-btn" onclick="go('screen-title')">← Menu</button><h2>Cidade de Esperança</h2><span></span></div>
+      <div class="map-hud" id="mapHud"></div>
+      <div class="content-wrap"><div class="node-grid" id="nodeGrid"></div></div>
+    </div>
+  </div>
+
+  <!-- ===================== INTRODUÇÃO DA FASE =====================
+       O botão "Começar" só aparece quando playIntro() termina a narração. -->
+  <div class="screen" id="screen-intro">
+    <div class="intro-box">
+      <h2 id="introTitle">🌊 Fase 1 — Enchente</h2>
+      <div id="intro-text"></div>
+      <button class="intro-start" id="introStartBtn" style="display:none;" onclick="startGameplay()">Começar</button>
+    </div>
+  </div>
+
+  <!-- ===================== TELA DE JOGO ===================== -->
+  <div class="screen" id="screen-game">
+    <div class="game-wrap">
+
+      <div class="hud">
+        <div class="hud-group lives-hearts" id="livesDisplay"></div>
+        <div class="hud-group">⭐ <span id="scoreDisplay">0</span> pontos</div>
+        <div class="hud-group">⏱️ <span id="timeDisplay">00:00</span></div>
+        <div class="hud-group">
+          <button id="hintBtn" onclick="useHint()">💡 Dica (<span id="hintCount">3</span>)</button>
+          <button onclick="pauseGame()">⏸ Pausar</button>
+        </div>
+      </div>
+
+      <div class="main-area">
+        <div class="board-panel"><div id="grid"></div></div>
+
+        <div class="side-panel">
+          <div class="panel-box"><h4>MISSÃO</h4><ul class="obj-list" id="objList"></ul></div>
+          <div class="panel-box"><h4 id="invTitle">MOCHILA</h4><div class="inv-row" id="invRow"></div></div>
+          <div class="panel-box controls-hint" id="controlsHint"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mensagem temporária no topo -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Popup das perguntas educativas -->
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal-box">
+        <div class="modal-tag" id="modalTag">PERGUNTA</div>
+        <div class="dlg-npc" id="modalDialogue" style="display:none;"></div>
+        <h3 id="modalQuestion"></h3>
+        <div id="modalOptions"></div>
+        <div class="feedback" id="modalFeedback"></div>
+        <button class="modal-continue" id="modalContinueBtn">Continuar</button>
+      </div>
+    </div>
+
+    <!-- Popup de pausa -->
+    <div class="modal-overlay" id="pauseOverlay">
+      <div class="modal-box" style="text-align:center;">
+        <h3 style="margin-bottom:18px;">⏸ Pausado</h3>
+        <button class="go-btn" style="width:100%;margin-bottom:10px;" onclick="resumeGame()">Continuar</button>
+        <button class="go-btn" style="width:100%;margin-bottom:10px;background:#fff;color:var(--navy);" onclick="restartPhase()">Reiniciar fase</button>
+        <button class="go-btn" style="width:100%;background:#fff;color:var(--navy);" onclick="go('screen-map')">Voltar ao mapa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TELA DE RESULTADO ===================== -->
+  <div class="screen" id="screen-results">
+    <div class="result-card">
+      <h2 id="resTitle">🎉 Missão Concluída!</h2>
+      <div class="stars" id="starsDisplay"></div>
+      <div class="stat-row"><span>Pontuação</span><span id="resScore">0</span></div>
+      <div class="stat-row"><span>Perguntas corretas</span><span id="resQuestions">0/0</span></div>
+      <div class="stat-row"><span>Vidas restantes</span><span id="resLives">❤️❤️❤️</span></div>
+      <div class="stat-row"><span>Tempo</span><span id="resTime">00:00</span></div>
+      <div class="learned-box"><strong>Você aprendeu:</strong><div id="resLearned"></div></div>
+      <div class="achv-row" id="resAchv"></div>
+      <div class="result-actions">
+        <button class="btn-main" onclick="go('screen-map')">Voltar ao mapa</button>
+        <button class="btn-ghost" onclick="restartPhase()">Jogar novamente</button>
+        <button class="btn-ghost" onclick="go('screen-title')">Menu principal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TELA DE DERROTA ===================== -->
+  <div class="screen" id="screen-over">
+    <div class="result-card">
+      <h2>💧 Você não conseguiu escapar</h2>
+      <p style="opacity:0.85; margin-top:8px; font-size:0.95rem;">Sem problema — em situações reais, aprender com o erro é o que salva vidas. Tente novamente!</p>
+      <div class="result-actions">
+        <button class="btn-main" onclick="restartPhase()">Tentar novamente</button>
+        <button class="btn-ghost" onclick="go('screen-map')">Voltar ao mapa</button>
+        <button class="btn-ghost" onclick="go('screen-title')">Menu principal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODO APRENDER =====================
+       Usada para a lista dos 6 desastres e para o conteúdo de cada um. -->
+  <div class="screen" id="screen-learn">
+    <div class="subscreen">
+      <div class="topbar"><button class="back-btn" id="learnBackBtn" onclick="go('screen-title')">← Voltar</button><h2 id="learnTitle">Aprender</h2><span></span></div>
+      <div class="content-wrap" id="learnContent"></div>
+    </div>
+  </div>
+
+  <!-- ===================== CONQUISTAS ===================== -->
+  <div class="screen" id="screen-achv">
+    <div class="subscreen">
+      <div class="topbar"><button class="back-btn" onclick="go('screen-title')">← Voltar</button><h2>Conquistas</h2><span></span></div>
+      <div class="content-wrap"><div class="achv-grid" id="achvGrid"></div></div>
+    </div>
+  </div>
+
+  <!-- ===================== CRÉDITOS ===================== -->
+  <div class="screen" id="screen-credits">
+    <div class="subscreen" style="overflow-y:auto;">
+      <div class="topbar"><button class="back-btn" onclick="go('screen-title')">← Voltar</button><h2>Créditos</h2><span></span></div>
+      <div class="content-wrap">
+        <div class="credits-scroll">
+          <div class="title-main" style="font-size:2rem;">DISASTER ESCAPE</div>
+          <div class="role">Game Design</div><div class="name">Equipe Disaster Escape</div>
+          <div class="role">Programação</div><div class="name">Equipe Disaster Escape</div>
+          <div class="role">Arte e Animação</div><div class="name">Equipe Disaster Escape</div>
+          <div class="role">Roteiro</div><div class="name">Equipe Disaster Escape</div>
+          <div class="role">Pesquisa e Conteúdo Educativo</div><div class="name">Defesa Civil e materiais públicos de prevenção</div>
+          <div class="role">Agradecimentos</div><div class="name">Professores, escolas e colaboradores</div>
+          <div class="credits-final">"Conhecimento, prevenção e solidariedade podem fazer a diferença."</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ==========================================================================
+   DISASTER ESCAPE — LÓGICA DO JOGO (JavaScript)
+
+   ROTEIRO DO ARQUIVO:
+      1. Navegação entre telas
+      2. Personagens e escolha de jogadores
+      3. Desenho do mapa e dados das 6 fases
+      4. Mapa da cidade
+      5. Introdução da fase
+      6. Montagem da partida (tabuleiro, HUD, objetivos)
+      7. Movimento e interação com as casas
+      8. Perguntas educativas
+      9. Dicas, pausa e fim de fase
+     10. Conquistas
+     11. Modo Aprender
+
+   OBSERVAÇÃO: o progresso fica apenas na memória. Ao recarregar a página,
+   o jogo recomeça do zero.
+   ========================================================================== */
+
+
+/* 1. NAVEGAÇÃO ENTRE TELAS
+   Esconde todas as telas e mostra só a pedida, pela classe "active".
+   O mapa e as conquistas são montados na hora, pois dependem do progresso. */
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+
+  if(id==='screen-map') renderMap();
+  if(id==='screen-achv') renderAchievements();
+}
+
+
+/* 2. PERSONAGENS E ESCOLHA DE JOGADORES */
+
+/* Lista dos personagens jogáveis. Para acrescentar um novo, basta
+   adicionar outro item: a tela de seleção é montada a partir desta lista. */
+const CHARACTERS = [
+  {id:'luna', name:'Luna', tag:'Observadora e cuidadosa', color:'#E8604A', emoji:'👧'},
+  {id:'theo', name:'Theo', tag:'Ágil e corajoso', color:'#3FA872', emoji:'👦'},
+  {id:'maya', name:'Maya', tag:'Calma e organizada', color:'#F4A93C', emoji:'👩'},
+  {id:'lucas', name:'Lucas', tag:'Comunicativo e atento', color:'#2E7CAE', emoji:'👨'},
+];
+
+/* Progresso geral do jogo (não é apagado ao trocar de fase) */
+let state = { playerCount: 1, p1: null, p2: null, completedPhases: {}, achievements: {} };
+
+/* Guarda quantos vão jogar, zera as escolhas e abre a seleção de personagem */
+function setPlayerCount(n){
+  state.playerCount = n; state.p1=null; state.p2=null;
+  renderCharGrid(); go('screen-char');
+}
+
+/* Monta a grade com os cartões dos personagens */
+function renderCharGrid(){
+  const grid = document.getElementById('charGrid'); grid.innerHTML='';
+
+  CHARACTERS.forEach(c=>{
+    const card = document.createElement('div');
+    card.className='char-card';
+    card.id='char-'+c.id;
+    card.innerHTML = `<div class="avatar" style="background:${c.color}">${c.emoji}</div><h3>${c.name}</h3><div class="tag">${c.tag}</div><button onclick="pickCharacter('${c.id}')">Escolher</button>`;
+    grid.appendChild(card);
+  });
+
+  updateSelectStatus();
+}
+
+/* Registra a escolha de um personagem.
+   1 jogador: a escolha vira o personagem dele.
+   2 jogadores: o 1º clique define o Jogador 1, o seguinte o Jogador 2.
+   Clicar de novo no Jogador 2 cancela a escolha; nunca podem repetir. */
+function pickCharacter(id){
+  const c = CHARACTERS.find(x=>x.id===id);
+
+  if(state.playerCount===1){ state.p1=c; }
+  else{
+    if(!state.p1) state.p1=c;
+    else if(state.p2 && id===state.p2.id) state.p2=null;
+    else if(id===state.p1.id){ /* já é do Jogador 1: não faz nada */ }
+    else if(!state.p2) state.p2=c;
+    else state.p2=c;
+  }
+
+  document.querySelectorAll('.char-card').forEach(el=>el.classList.remove('selected','selected-p2'));
+  if(state.p1) document.getElementById('char-'+state.p1.id).classList.add('selected');
+  if(state.p2) document.getElementById('char-'+state.p2.id).classList.add('selected-p2');
+
+  updateSelectStatus();
+}
+
+/* Atualiza a mensagem de orientação e libera o botão de avançar */
+function updateSelectStatus(){
+  const statusEl = document.getElementById('selectStatus');
+  const goBtn = document.getElementById('charGoBtn');
+
+  if(state.playerCount===1){
+    statusEl.textContent = state.p1 ? `Jogador: ${state.p1.name} selecionado.` : 'Selecione o personagem do Jogador 1.';
+    goBtn.disabled = !state.p1;
+  } else {
+    if(!state.p1) statusEl.textContent = 'Selecione o personagem do Jogador 1.';
+    else if(!state.p2) statusEl.textContent = `Jogador 1: ${state.p1.name}. Agora selecione o Jogador 2.`;
+    else statusEl.textContent = `Jogador 1: ${state.p1.name}  •  Jogador 2: ${state.p2.name}`;
+
+    goBtn.disabled = !(state.p1 && state.p2);
+  }
+}
+
+
+/* ==========================================================================
+   3. DESENHO DO MAPA E DADOS DAS 6 FASES
+   ========================================================================== */
+
+/* DESENHO DO TABULEIRO (o mesmo para todas as fases).
+     #  parede — bloqueia a passagem
+     .  caminho livre
+     ~  área de risco: ao pisar, aparece uma pergunta; errar custa uma vida
+     B  item da fase
+     M  primeiro morador que precisa de ajuda
+     N  segundo morador que precisa de ajuda
+     E  ponto de encontro seguro (saída)
+   Todas as linhas precisam ter o mesmo número de letras. */
+const GRID_ROWS = [
+  "##########",
+  "#..~~..M.#",
+  "#.B.~....#",
+  "#...~~.N.#",
+  "#........#",
+  "####E#####",
+];
+
+/* Tamanho de cada casa do tabuleiro, em pixels */
+const TILE_SIZE = 54;
+
+/* CONTEÚDO DAS FASES.
+   Cada pergunta tem: enunciado (q), alternativas (opts), índice da correta
+   (correct, começando em 0) e explicação (exp). */
+const PHASE_DATA = {
+  enchente: {
+    order:0, name:'Enchente', mapEmoji:'🌊', accent:'#2E7CAE', accent2:'#1F4E68',
+    hazardName:'ÁREA ALAGADA', hazardDialogue:'Esta área está com água em movimento. Responda com atenção antes de seguir.',
+    itemName:'Mochila de emergência', itemEmoji:'🎒',
+    npc1:{key:'João', name:'Sr. João', emoji:'🧑'}, npc2:{key:'Marta', name:'Dona Marta', emoji:'🧓'},
+    intro:[
+      "Uma forte chuva atinge a cidade de Esperança há horas.",
+      "O rio começou a transbordar e algumas ruas já estão alagando.",
+      "Moradores precisam de ajuda para chegar a um local seguro.",
+      "Sua missão é encontrar a mochila de emergência, ajudar quem precisa e chegar ao ponto de encontro — sem entrar em áreas de risco."
+    ],
+    hints:[
+      "A mochila de emergência está mais ao norte, próxima à entrada.",
+      "Áreas com água em movimento exigem atenção — responda com calma antes de seguir.",
+      "Você precisa ajudar as duas pessoas da vizinhança antes de seguir para o ponto de encontro."
+    ],
+    resultLearned: "Em uma enchente, busque locais altos e seguros, evite áreas alagadas e com correnteza, desligue a energia elétrica quando possível e sempre siga as orientações da Defesa Civil.",
+    learn:[
+      {t:'O que é', p:'Uma enchente acontece quando o volume de água de um rio, córrego ou área urbana ultrapassa sua capacidade normal, cobrindo ruas, casas e outras áreas.'},
+      {t:'Como pode acontecer', p:'Chuvas fortes e contínuas, solo impermeabilizado, rios assoreados e drenagem urbana insuficiente são causas comuns.'},
+      {t:'Principais riscos', p:'Correntezas, contato com água contaminada, choque elétrico, desabamentos e perda de bens materiais.'},
+      {t:'Como prevenir', p:'Evitar construir em áreas de risco, manter bueiros desobstruídos, conhecer a rota de fuga da sua região e ter um kit de emergência preparado.'},
+      {t:'Durante a enchente', p:'Procure um local alto e seguro, desligue a energia elétrica se possível, evite atravessar áreas alagadas e siga as orientações da Defesa Civil.'},
+      {t:'Depois da enchente', p:'Só retorne para casa quando as autoridades confirmarem que é seguro. Evite contato direto com a lama e trate a água antes de consumir.'},
+    ],
+    questions:[
+      {q:"Você percebe que uma área está começando a alagar. O que deve fazer?", opts:["Atravessar a área alagada rapidamente","Procurar um local seguro e seguir as orientações das autoridades","Ficar próximo ao rio para observar","Entrar na água para verificar a profundidade"], correct:1, exp:"Em uma enchente, o mais seguro é buscar um local alto e seguro e seguir as orientações oficiais."},
+      {q:"Durante uma enchente, é seguro andar por uma rua com água em movimento?", opts:["Sim, se a água estiver rasa","Não, a correnteza pode derrubar uma pessoa mesmo em pouca água","Sim, sempre","Só se estiver de tênis"], correct:1, exp:"Poucos centímetros de água em movimento já podem derrubar uma pessoa."},
+      {q:"O que fazer com a energia elétrica de casa antes de uma enchente atingir a região?", opts:["Deixar ligada normalmente","Desligar o disjuntor geral, se for seguro fazê-lo","Aumentar a voltagem","Ignorar, não tem relação"], correct:1, exp:"Desligar a energia (quando seguro) ajuda a evitar choques elétricos."},
+      {q:"Qual item é essencial ter em uma mochila de emergência?", opts:["Apenas dinheiro","Documentos, água, lanterna e itens de primeiros socorros","Apenas roupas novas","Apenas o celular"], correct:1, exp:"Uma mochila de emergência deve ter documentos, água, alimentos, lanterna, rádio e kit de primeiros socorros."},
+      {q:"Depois que a água de uma enchente baixa, é seguro voltar para casa imediatamente?", opts:["Sim, sempre","Só depois que as autoridades confirmarem que é seguro","Sim, se a rua estiver seca","Não importa"], correct:1, exp:"Estruturas podem ficar fragilizadas e a água pode estar contaminada."},
+      {q:"Qual é uma causa comum de enchentes em áreas urbanas?", opts:["Bueiros desobstruídos","Chuvas fortes somadas a bueiros entupidos e solo impermeabilizado","Excesso de árvores","Falta de carros nas ruas"], correct:1, exp:"Drenagem insuficiente e pouca área permeável aumentam muito o risco."},
+      {q:"Se você vir um cabo de energia caído perto de uma área alagada, o que fazer?", opts:["Tocar para verificar se está energizado","Manter distância e avisar as autoridades","Empurrar com um pedaço de madeira","Ignorar e passar por perto"], correct:1, exp:"Nunca toque em fios caídos. Mantenha distância e avise a Defesa Civil."},
+      {q:"Qual atitude ajuda a prevenir enchentes na sua comunidade?", opts:["Jogar lixo nos bueiros","Manter bueiros e córregos limpos e desobstruídos","Construir sobre o leito do rio","Ignorar avisos da Defesa Civil"], correct:1, exp:"Manter a drenagem urbana limpa é uma das melhores formas de prevenção."},
+    ],
+  },
+  deslizamento: {
+    order:1, name:'Deslizamento', mapEmoji:'⛰️', accent:'#8C6A4A', accent2:'#4E3A28',
+    hazardName:'SOLO INSTÁVEL', hazardDialogue:'O terreno aqui apresenta rachaduras e pode estar instável. Responda com atenção antes de seguir.',
+    itemName:'Rádio de emergência', itemEmoji:'📻',
+    npc1:{key:'Antonio', name:'Seu Antônio', emoji:'👨‍🦳'}, npc2:{key:'Bia', name:'Bia', emoji:'👧'},
+    intro:[
+      "Depois de dias de chuva intensa, a encosta da região montanhosa começa a ceder.",
+      "Rachaduras aparecem no solo e árvores começam a inclinar-se estranhamente.",
+      "Moradores da encosta precisam identificar os riscos e sair da área com segurança.",
+      "Sua missão é encontrar um rádio de emergência, ajudar os moradores e chegar ao ponto de encontro, evitando áreas de solo instável."
+    ],
+    hints:[
+      "O rádio de emergência ajuda a receber alertas da Defesa Civil — está perto da entrada da vila.",
+      "Rachaduras no solo, árvores inclinadas e barulhos estranhos são sinais de risco de deslizamento.",
+      "Ajude o Seu Antônio e a Bia antes de seguir para o ponto seguro."
+    ],
+    resultLearned: "Rachaduras no solo, árvores ou postes inclinados e barulhos de estalos são sinais de alerta de deslizamento. Ao perceber esses sinais, saia da área imediatamente e avise a Defesa Civil.",
+    learn:[
+      {t:'O que é', p:'Um deslizamento de terra ocorre quando uma massa de solo, rocha ou lama se desprende de uma encosta e desce rapidamente, geralmente após chuvas intensas.'},
+      {t:'Como pode acontecer', p:'Chuvas fortes e prolongadas, desmatamento, ocupação irregular de encostas e falta de contenção do solo aumentam o risco.'},
+      {t:'Principais riscos', p:'Soterramento, destruição de casas e vias, rompimento de redes de água e energia.'},
+      {t:'Como prevenir', p:'Evitar morar ou construir em encostas íngremes, preservar a vegetação, cuidar da drenagem da água da chuva e observar sinais de instabilidade.'},
+      {t:'Durante o deslizamento', p:'Afaste-se imediatamente da encosta, procure um local plano e seguro e não tente salvar pertences.'},
+      {t:'Depois do deslizamento', p:'Não retorne à área até que a Defesa Civil confirme segurança; ela pode estar instável para novos deslizamentos.'},
+    ],
+    questions:[
+      {q:"Qual desses é um sinal de alerta de possível deslizamento?", opts:["Grama bem cortada","Rachaduras no solo e árvores inclinadas","Céu nublado","Rua movimentada"], correct:1, exp:"Rachaduras, árvores ou postes inclinados e barulhos de estalos indicam instabilidade do solo."},
+      {q:"Ao perceber sinais de deslizamento, o que você deve fazer primeiro?", opts:["Esperar para ver se piora","Afastar-se da encosta e buscar um local seguro","Filmar para postar depois","Ir dormir normalmente"], correct:1, exp:"O ideal é se afastar imediatamente da área de risco."},
+      {q:"O que ajuda a reduzir o risco de deslizamentos em encostas?", opts:["Desmatar a vegetação","Preservar a vegetação e cuidar da drenagem da água","Construir mais casas na encosta","Jogar entulho na encosta"], correct:1, exp:"A vegetação e uma boa drenagem ajudam a estabilizar o solo."},
+      {q:"É seguro reconstruir logo após um deslizamento na mesma encosta?", opts:["Sim, imediatamente","Não, é preciso avaliação técnica e autorização da Defesa Civil","Sim, se for rápido","Não importa"], correct:1, exp:"A área pode continuar instável e precisa de avaliação antes de qualquer reconstrução."},
+      {q:"Durante fortes chuvas em área de encosta, qual atitude é mais segura?", opts:["Ficar atento a alertas da Defesa Civil e sinais no terreno","Ignorar avisos oficiais","Sair para passear na encosta","Aumentar o volume da música para não ouvir a chuva"], correct:0, exp:"Ficar atento a alertas oficiais e sinais físicos é essencial para agir a tempo."},
+      {q:"Qual item pode ajudar bastante durante um alerta de deslizamento?", opts:["Um rádio para acompanhar informações da Defesa Civil","Uma bola de futebol","Um espelho","Um ventilador"], correct:0, exp:"Um rádio permite acompanhar alertas e orientações mesmo sem energia elétrica ou internet."},
+    ],
+  },
+  incendio: {
+    order:2, name:'Incêndio Florestal', mapEmoji:'🔥', accent:'#E8604A', accent2:'#8C3A28',
+    hazardName:'ÁREA COM FUMAÇA', hazardDialogue:'A fumaça está densa nesta área e pode ser perigosa para respirar. Responda com atenção antes de atravessar.',
+    itemName:'Pano úmido de proteção', itemEmoji:'💧',
+    npc1:{key:'Carlos', name:'Seu Carlos', emoji:'👨‍🌾'}, npc2:{key:'Duda', name:'Duda', emoji:'🧒'},
+    intro:[
+      "Um período de seca deixou a vegetação da área rural extremamente seca.",
+      "Um princípio de incêndio se espalha rapidamente entre a mata e algumas propriedades.",
+      "A fumaça reduz a visibilidade e famílias precisam evacuar a área com segurança.",
+      "Sua missão é encontrar um item de proteção respiratória, ajudar quem precisa e alcançar a rota de evacuação, evitando áreas com fumaça densa."
+    ],
+    hints:[
+      "Um pano úmido pode ajudar a proteger as vias respiratórias contra a fumaça.",
+      "Em áreas com fumaça, abaixe-se: o ar mais limpo fica mais perto do chão.",
+      "Ajude o Seu Carlos e a Duda antes de seguir para a rota de evacuação."
+    ],
+    resultLearned: "Durante um incêndio florestal, proteja as vias respiratórias, mantenha-se afastado da fumaça e do fogo, siga rotas de evacuação sinalizadas e nunca tente apagar um incêndio grande sozinho.",
+    learn:[
+      {t:'O que é', p:'Um incêndio florestal é o fogo que se alastra descontroladamente por áreas de vegetação, como matas, campos ou áreas rurais.'},
+      {t:'Como pode acontecer', p:'Clima seco, ventos fortes, queimadas para limpeza de terreno mal controladas e descarte incorreto de materiais inflamáveis são causas comuns.'},
+      {t:'Principais riscos', p:'Queimaduras, intoxicação por fumaça, perda de plantações e moradias, e danos à fauna e flora.'},
+      {t:'Como prevenir', p:'Evitar queimadas em períodos secos, não descartar cigarros ou vidro na vegetação e manter aceiros (faixas sem vegetação) ao redor de propriedades.'},
+      {t:'Durante o incêndio', p:'Afaste-se na direção contrária ao vento e à fumaça, proteja as vias respiratórias e siga as rotas de evacuação indicadas pelas equipes de emergência.'},
+      {t:'Depois do incêndio', p:'Só retorne à área quando as autoridades confirmarem segurança; cinzas e brasas podem continuar quentes por horas.'},
+    ],
+    questions:[
+      {q:"Ao perceber fumaça densa se aproximando, o que fazer?", opts:["Correr na direção do vento e da fumaça","Afastar-se na direção contrária ao vento e à fumaça","Ficar parado observando","Tentar apagar sozinho com um copo d'água"], correct:1, exp:"Deve-se sempre se afastar da direção do vento e da fumaça, buscando uma rota segura."},
+      {q:"Como proteger as vias respiratórias durante um incêndio com fumaça?", opts:["Respirando fundo diretamente na fumaça","Cobrindo nariz e boca com um pano, de preferência úmido","Segurando a respiração o tempo todo","Não é necessário se proteger"], correct:1, exp:"Um pano, se possível úmido, ajuda a filtrar parte da fumaça."},
+      {q:"Qual atitude ajuda a prevenir incêndios florestais?", opts:["Fazer queimadas sem controle","Não descartar cigarros ou vidro na vegetação seca","Acender fogueiras em qualquer lugar da mata","Ignorar períodos de seca"], correct:1, exp:"Pequenos descuidos, como bitucas de cigarro, são causas comuns de incêndios."},
+      {q:"Em ambientes com muita fumaça, por que é recomendado abaixar-se ao se locomover?", opts:["Porque é mais rápido","Porque o ar mais limpo fica mais próximo do chão","Porque cansa menos","Não há motivo específico"], correct:1, exp:"A fumaça tende a subir, então o ar próximo ao chão costuma ser menos tóxico."},
+      {q:"O que fazer ao encontrar uma rota de evacuação sinalizada durante um incêndio?", opts:["Ignorar e escolher outro caminho por conta própria","Segui-la, pois foi planejada pelas equipes de emergência","Voltar para buscar pertences antes","Esperar a fumaça diminuir para decidir depois"], correct:1, exp:"Rotas de evacuação são planejadas pensando na segurança e velocidade de saída."},
+      {q:"É seguro voltar para casa logo após o fogo ser controlado?", opts:["Sim, imediatamente","Não, é preciso esperar a confirmação das autoridades, pois pode haver brasas e riscos ocultos","Sim, se não houver mais fumaça visível","Não importa o momento"], correct:1, exp:"Cinzas e brasas podem continuar quentes e perigosas por muito tempo depois do fogo aparente ter passado."},
+    ],
+  },
+  tempestade: {
+    order:3, name:'Tempestade', mapEmoji:'🌪️', accent:'#5B6B8C', accent2:'#2E3A52',
+    hazardName:'ÁREA EXPOSTA', hazardDialogue:'Esta área está exposta a ventos fortes e possíveis raios. Responda com atenção antes de atravessar.',
+    itemName:'Lanterna', itemEmoji:'🔦',
+    npc1:{key:'Ricardo', name:'Sr. Ricardo', emoji:'🧑'}, npc2:{key:'Elisa', name:'Dona Elisa', emoji:'👵'},
+    intro:[
+      "O céu do centro da cidade escurece rapidamente e o vento começa a ficar mais forte.",
+      "Uma tempestade com raios e rajadas intensas se aproxima.",
+      "A energia elétrica pode falhar a qualquer momento e árvores começam a balançar perigosamente.",
+      "Sua missão é encontrar uma lanterna, ajudar quem precisa de orientação e chegar a um abrigo seguro, evitando áreas abertas e expostas."
+    ],
+    hints:[
+      "A lanterna vai ajudar caso a energia elétrica falhe durante a tempestade.",
+      "Evite áreas abertas, embaixo de árvores isoladas ou perto de estruturas metálicas durante raios.",
+      "Ajude o Sr. Ricardo e a Dona Elisa antes de seguir para o abrigo."
+    ],
+    resultLearned: "Durante tempestades com raios, procure abrigo em construções seguras, evite áreas abertas e árvores isoladas, e desligue aparelhos elétricos até a tempestade passar.",
+    learn:[
+      {t:'O que é', p:'Uma tempestade é um fenômeno climático com chuva intensa, ventos fortes, trovões e raios, podendo durar minutos ou horas.'},
+      {t:'Como pode acontecer', p:'Formam-se quando massas de ar quente e úmido sobem rapidamente e encontram ar mais frio, gerando nuvens carregadas de eletricidade.'},
+      {t:'Principais riscos', p:'Queda de raios, queda de árvores e postes, alagamentos rápidos e falta de energia elétrica.'},
+      {t:'Como prevenir', p:'Acompanhar previsões do tempo, podar árvores próximas a residências e ter lanternas e rádios com pilhas em casa.'},
+      {t:'Durante a tempestade', p:'Procure abrigo em local fechado e seguro, evite áreas abertas e árvores isoladas, e desligue aparelhos elétricos da tomada.'},
+      {t:'Depois da tempestade', p:'Tenha cuidado com fios caídos e árvores danificadas antes de sair, e só utilize a rede elétrica após verificar que está segura.'},
+    ],
+    questions:[
+      {q:"Durante uma tempestade com raios, onde é mais arriscado ficar?", opts:["Dentro de uma casa fechada","Em uma área aberta ou embaixo de uma árvore isolada","Em um cômodo sem janelas","Sentado longe de janelas"], correct:1, exp:"Áreas abertas e árvores isoladas aumentam o risco de ser atingido por um raio."},
+      {q:"O que fazer com aparelhos elétricos durante uma tempestade forte?", opts:["Deixar todos ligados normalmente","Desligar da tomada os aparelhos não essenciais","Ligar mais aparelhos","Não faz diferença"], correct:1, exp:"Raios podem causar picos de energia que danificam aparelhos e oferecem risco de incêndio."},
+      {q:"Por que é importante ter uma lanterna em casa durante tempestades?", opts:["Para decoração","Porque a energia elétrica pode faltar durante a tempestade","Não tem utilidade","Só serve para brincar"], correct:1, exp:"Quedas de energia são comuns durante tempestades fortes."},
+      {q:"Ao dirigir durante uma tempestade forte, qual atitude é mais segura?", opts:["Acelerar para sair logo da chuva","Reduzir a velocidade e manter distância segura dos outros veículos","Ligar o farol alto o tempo todo","Parar no meio da pista"], correct:1, exp:"Reduzir a velocidade evita aquaplanagem e acidentes em pista molhada."},
+      {q:"Depois que a tempestade passa, qual cuidado é importante ao sair de casa?", opts:["Nenhum cuidado especial","Ficar atento a fios caídos e árvores ou galhos danificados","Correr para brincar nas poças","Ignorar avisos da prefeitura"], correct:1, exp:"Fios caídos e estruturas danificadas continuam sendo perigosos mesmo depois da tempestade."},
+      {q:"O que fazer se estiver ao ar livre e a tempestade começar de repente?", opts:["Continuar a atividade normalmente","Procurar abrigo seguro o mais rápido possível","Subir em um local alto para ver melhor","Ficar parado no mesmo lugar"], correct:1, exp:"Buscar abrigo rapidamente reduz o risco de ser atingido por raios ou objetos levados pelo vento."},
+    ],
+  },
+  seca: {
+    order:4, name:'Seca', mapEmoji:'☀️', accent:'#D9A24B', accent2:'#8C6A28',
+    hazardName:'DESPERDÍCIO DE ÁGUA', hazardDialogue:'Você percebe um ponto de desperdício de água na propriedade. Responda com atenção sobre como agir.',
+    itemName:'Balde de captação de chuva', itemEmoji:'🪣',
+    npc1:{key:'Pedro', name:'Seu Pedro', emoji:'👨‍🌾'}, npc2:{key:'Rosa', name:'Dona Rosa', emoji:'👩'},
+    intro:[
+      "A região rural enfrenta um longo período sem chuvas.",
+      "Os reservatórios de água estão cada vez mais baixos e a comunidade precisa agir com cuidado.",
+      "Pequenas atitudes de desperdício podem agravar ainda mais a escassez de água.",
+      "Sua missão é encontrar um sistema de captação de água, ajudar a comunidade e chegar ao centro de gestão de água, corrigindo desperdícios pelo caminho."
+    ],
+    hints:[
+      "Um balde ou sistema de captação de água da chuva ajuda a guardar água para períodos secos.",
+      "Corrija pontos de desperdício de água sempre que encontrar um.",
+      "Ajude o Seu Pedro e a Dona Rosa antes de seguir para o ponto de encontro."
+    ],
+    resultLearned: "Em períodos de seca, é essencial evitar o desperdício de água, reaproveitar água da chuva quando possível e priorizar o consumo consciente para toda a comunidade.",
+    learn:[
+      {t:'O que é', p:'A seca é um longo período sem chuvas suficientes, que reduz a disponibilidade de água em rios, reservatórios e no solo.'},
+      {t:'Como pode acontecer', p:'Mudanças climáticas, desmatamento, uso excessivo dos recursos hídricos e falta de planejamento no uso da água contribuem para secas mais intensas.'},
+      {t:'Principais riscos', p:'Falta de água para consumo e agricultura, perda de plantações, conflitos pelo uso da água e impacto na saúde da população.'},
+      {t:'Como prevenir', p:'Usar a água de forma consciente, captar água da chuva, consertar vazamentos rapidamente e preservar nascentes e vegetação.'},
+      {t:'Durante a seca', p:'Priorize o uso da água para necessidades essenciais, evite desperdícios e siga orientações de racionamento quando houver.'},
+      {t:'Depois da seca', p:'Continue com hábitos de uso consciente da água, já que os reservatórios levam tempo para se recuperar totalmente.'},
+    ],
+    questions:[
+      {q:"Qual atitude ajuda a economizar água durante uma seca?", opts:["Deixar a torneira aberta enquanto escova os dentes","Fechar a torneira ao escovar os dentes ou ensaboar louça","Lavar a calçada com mangueira todos os dias","Regar o jardim no horário de sol forte"], correct:1, exp:"Pequenas atitudes, como fechar a torneira, economizam uma quantidade significativa de água ao longo do tempo."},
+      {q:"O que fazer ao perceber um vazamento de água em casa?", opts:["Ignorar, pois é pouca água","Consertar o vazamento o quanto antes","Deixar vazando até o fim do mês","Aumentar a pressão da água"], correct:1, exp:"Vazamentos, mesmo pequenos, podem desperdiçar muita água ao longo do tempo."},
+      {q:"Qual é uma boa forma de aproveitar a água da chuva?", opts:["Deixar escoar direto para o esgoto","Captar em reservatórios para reutilizar depois","Jogar fora imediatamente","Não há como aproveitar"], correct:1, exp:"Captar água da chuva é uma forma eficiente de reduzir o consumo de água tratada."},
+      {q:"Durante um período de seca, qual atividade deve ser evitada?", opts:["Lavar o carro com mangueira aberta sem necessidade","Reutilizar água da máquina de lavar para outras tarefas","Consertar vazamentos","Usar balde em vez de mangueira para lavar o carro"], correct:0, exp:"Usar mangueira aberta sem necessidade é um grande desperdício de água em períodos de escassez."},
+      {q:"Por que a preservação de árvores e nascentes ajuda a prevenir secas mais graves?", opts:["Não tem relação com a água","Elas ajudam a manter o ciclo da água e a umidade do solo","Elas atrapalham a chuva","Elas aumentam o desperdício"], correct:1, exp:"A vegetação ajuda a regular o ciclo da água e a manter nascentes e o solo mais úmidos."},
+      {q:"Se a prefeitura decretar racionamento de água, qual é a atitude correta?", opts:["Ignorar e usar água normalmente","Seguir os horários e orientações de uso consciente","Reclamar e continuar do mesmo jeito","Guardar água de forma exagerada e ilegal"], correct:1, exp:"Seguir as orientações de racionamento ajuda a garantir água para toda a comunidade."},
+    ],
+  },
+  erosao: {
+    order:5, name:'Erosão Costeira', mapEmoji:'🌊', accent:'#2E9CAE', accent2:'#1F5E68',
+    hazardName:'ÁREA DE RISCO COSTEIRO', hazardDialogue:'Esta área está próxima de uma zona de erosão ou possível ressaca. Responda com atenção antes de seguir.',
+    itemName:'Kit de segurança costeira', itemEmoji:'🥾',
+    npc1:{key:'Ze', name:'Seu Zé', emoji:'🎣'}, npc2:{key:'Marina', name:'Marina', emoji:'🏖️'},
+    intro:[
+      "Uma forte ressaca atinge a região litorânea, com ondas muito mais altas que o normal.",
+      "Parte da faixa de areia perto das casas já está sendo levada pelo mar.",
+      "Moradores e turistas precisam se afastar da orla e buscar áreas seguras.",
+      "Sua missão é encontrar um kit de segurança, ajudar quem está na área de risco e chegar a um ponto seguro, evitando as áreas de erosão."
+    ],
+    hints:[
+      "O kit de segurança costeira ajuda a se preparar caso seja necessário se afastar rapidamente da orla.",
+      "Áreas onde a areia está sendo levada pelo mar ou falésias com rachaduras são sinais de risco.",
+      "Ajude o Seu Zé e a Marina antes de seguir para o ponto seguro."
+    ],
+    resultLearned: "Durante ressacas e erosão costeira, é importante manter distância de áreas com risco de queda de falésias, respeitar faixas de segurança na praia e apoiar ações de preservação da vegetação costeira.",
+    learn:[
+      {t:'O que é', p:'A erosão costeira é o desgaste progressivo da faixa litorânea pela ação das ondas, correntes e ventos, agravado durante ressacas.'},
+      {t:'Como pode acontecer', p:'Ocupação irregular da orla, retirada da vegetação de dunas e dos manguezais, e eventos climáticos mais intensos aceleram a erosão.'},
+      {t:'Principais riscos', p:'Desmoronamento de estruturas próximas à praia, perda de áreas de terra e risco a quem está próximo de falésias ou dunas instáveis durante ressacas.'},
+      {t:'Como prevenir', p:'Preservar dunas, vegetação de restinga e manguezais, respeitar distâncias mínimas de construção da orla e monitorar áreas de risco.'},
+      {t:'Durante a ressaca', p:'Afaste-se da faixa de areia mais próxima do mar, evite ficar sob falésias e siga orientações de defesa civil e salva-vidas.'},
+      {t:'Depois do evento', p:'Evite se aproximar de áreas onde o solo ficou instável até que sejam avaliadas por especialistas.'},
+    ],
+    questions:[
+      {q:"O que é erosão costeira?", opts:["O crescimento da praia com o tempo","O desgaste progressivo da faixa litorânea pela ação do mar","Um tipo de vento forte","Uma espécie de peixe"], correct:1, exp:"A erosão costeira é o processo de desgaste da orla pela força das ondas e correntes."},
+      {q:"Durante uma ressaca forte, o que é mais seguro fazer?", opts:["Ficar bem perto da água para ver as ondas de perto","Manter distância segura da faixa de areia mais próxima do mar","Nadar mesmo com bandeiras de alerta","Ignorar os avisos dos salva-vidas"], correct:1, exp:"Ondas de ressaca podem alcançar áreas muito além do normal, colocando pessoas em risco."},
+      {q:"Por que preservar dunas e manguezais ajuda a proteger a costa?", opts:["Eles não têm nenhuma função","Eles ajudam a conter o avanço do mar e a erosão","Eles atrapalham o turismo","Eles aumentam a erosão"], correct:1, exp:"Dunas e manguezais funcionam como barreiras naturais contra o avanço do mar."},
+      {q:"O que fazer ao ver rachaduras em uma falésia próxima à praia?", opts:["Subir para tirar fotos","Manter distância e avisar as autoridades","Fazer piquenique embaixo dela","Ignorar completamente"], correct:1, exp:"Falésias com rachaduras podem desabar repentinamente e representam risco grave."},
+      {q:"Qual dessas ações contribui para a erosão costeira?", opts:["Preservar a vegetação de restinga","Construções irregulares muito próximas da orla","Respeitar áreas de proteção ambiental","Monitorar a linha da costa"], correct:1, exp:"Construções muito próximas da orla, sem planejamento, aceleram o processo de erosão."},
+      {q:"Ao ouvir um alerta de ressaca, qual é a atitude recomendada?", opts:["Ir à praia mesmo assim para nadar","Seguir as orientações da Defesa Civil e evitar a orla no período do alerta","Ignorar, pois é apenas uma sugestão","Levar mais pessoas para a praia"], correct:1, exp:"Alertas de ressaca indicam risco real e devem ser seguidos com atenção."},
+    ],
+  },
+};
+
+/* Ordem das fases no mapa. Os nomes precisam ser iguais aos de PHASE_DATA. */
+const PHASE_ORDER = ['enchente','deslizamento','incendio','tempestade','seca','erosao'];
+
+
+/* 4. MAPA DA CIDADE
+   A primeira fase está sempre disponível; cada outra só abre depois que a
+   anterior foi concluída. */
+function renderMap(){
+  const hud = document.getElementById('mapHud');
+
+  const names = [state.p1?.name, state.p2?.name].filter(Boolean).join(' & ');
+  const totalScore = Object.values(state.completedPhases).reduce((a,p)=>a+(p.score||0),0);
+
+  hud.innerHTML = `<span>👥 ${names||'—'}</span><span>⭐ ${totalScore} pontos</span><span>🏆 ${Object.keys(state.achievements).length} conquistas</span>`;
+
+  const grid = document.getElementById('nodeGrid');
+  grid.innerHTML = '';
+
+  PHASE_ORDER.forEach((id,i)=>{
+    const p = PHASE_DATA[id];
+
+    const unlocked = i===0 || state.completedPhases[PHASE_ORDER[i-1]];
+    const done = !!state.completedPhases[id];
+
+    const node = document.createElement('div');
+    node.className = 'node' + (unlocked? '' : ' locked') + (done? ' done':'');
+
+    node.innerHTML = `
+      ${done? '<span class="badge">⭐</span>':''}
+      <span class="emoji">${p.mapEmoji}</span>
+      <h4>${p.name}</h4>
+      <div class="status">${unlocked ? (done? 'Concluída' : 'Disponível') : 'Bloqueada — complete a fase anterior'}</div>
+      <button ${unlocked? '' : 'disabled'} onclick="openPhase('${id}')">${done? 'Jogar novamente' : 'Iniciar'}</button>
+    `;
+
+    grid.appendChild(node);
+  });
+}
+
+/* Abre a introdução da fase escolhida (com nova checagem de liberação) */
+function openPhase(id){
+  const idx = PHASE_ORDER.indexOf(id);
+  const unlocked = idx===0 || state.completedPhases[PHASE_ORDER[idx-1]];
+  if(!unlocked) return;
+
+  currentPhaseId = id;
+  applyPhaseTheme(id, 'screen-intro');
+  go('screen-intro');
+
+  document.getElementById('introTitle').textContent = `${PHASE_DATA[id].mapEmoji} Fase ${idx+1} — ${PHASE_DATA[id].name}`;
+
+  playIntro(id);
+}
+
+/* Pinta o fundo de uma tela com as duas cores da fase */
+function applyPhaseTheme(id, screenId){
+  const p = PHASE_DATA[id];
+  const el = document.getElementById(screenId);
+  el.style.background = `linear-gradient(180deg, ${p.accent} 0%, ${p.accent2} 100%)`;
+}
+
+
+/* 5. INTRODUÇÃO DA FASE */
+
+/* Fase que está sendo jogada no momento */
+let currentPhaseId = 'enchente';
+
+/* Escreve a introdução letra por letra (14ms por letra, 240ms de pausa
+   entre linhas). Ao final, mostra o botão "Começar". */
+function playIntro(id){
+  const lines = PHASE_DATA[id].intro;
+  const el = document.getElementById('intro-text');
+  const btn = document.getElementById('introStartBtn');
+
+  el.textContent='';
+  btn.style.display='none';
+
+  let li=0, ci=0;
+
+  function typeLine(){
+    if(li>=lines.length){ btn.style.display='inline-block'; return; }
+    const line = lines[li];
+
+    if(ci<line.length){
+      el.textContent += line[ci]; ci++;
+      setTimeout(typeLine, 14);
+    } else {
+      el.textContent += '\n\n'; li++; ci=0;
+      setTimeout(typeLine, 240);
+    }
+  }
+
+  typeLine();
+}
+
+/* Sorteia uma pergunta ainda não usada nesta partida. Se todas já foram
+   usadas, a lista volta a ser completa. */
+function randomQuestion(bank, excludeIdxs){
+  const pool = bank.map((q,i)=>i).filter(i=>!excludeIdxs.includes(i));
+  const list = pool.length? pool : bank.map((q,i)=>i);
+  return list[Math.floor(Math.random()*list.length)];
+}
+
+
+/* 6. MONTAGEM DA PARTIDA (TABULEIRO, HUD E OBJETIVOS) */
+
+/* Tudo o que muda durante UMA partida (diferente de "state") */
+let game = null;
+
+/* Cria o estado inicial de uma partida */
+function buildGameState(phaseId){
+  // Cópia do mapa em matriz, para poder alterá-la sem mexer em GRID_ROWS
+  const grid = GRID_ROWS.map(row=>row.split(''));
+
+  const players = [];
+
+  // Jogador 1: linha 4, coluna 1, setas do teclado
+  players.push({ id:'p1', char: state.p1, x:1, y:4, controls:'arrows', color: state.p1.color });
+
+  // Jogador 2 (se existir): ao lado, teclas W A S D
+  if(state.playerCount===2){
+    players.push({ id:'p2', char: state.p2, x:2, y:4, controls:'wasd', color: state.p2.color });
+  }
+
+  return {
+    phaseId, grid, players,
+    lives:3,
+    score:0,
+    hints:3,
+    usedQuestionIdx:[],
+    correctCount:0,
+    wrongCount:0,
+    objectives:{ item:false, npc1:false, npc2:false, questions:false, arrived:false },
+    inventory:[],
+    startTime: Date.now(),
+    timerId:null,
+    paused:false,
+    ended:false,
+  };
+}
+
+/* Começa a fase: cria o estado, desenha tudo e liga cronômetro e teclado */
+function startGameplay(){
+  game = buildGameState(currentPhaseId);
+
+  applyPhaseTheme(currentPhaseId, 'screen-game');
+  go('screen-game');
+
+  renderGrid();
+  renderHud();
+  renderObjectives();
+  renderInventory();
+
+  const pd = PHASE_DATA[currentPhaseId];
+
+  document.getElementById('invTitle').textContent = pd.itemName.toUpperCase();
+
+  const ctrl = document.getElementById('controlsHint');
+  ctrl.innerHTML = state.playerCount===2
+    ? '<h4>CONTROLES</h4>Jogador 1: setas do teclado<br>Jogador 2: W A S D'
+    : '<h4>CONTROLES</h4>Use as setas do teclado (ou segundo jogador as teclas: W A S D) para se mover.';
+
+  game.timerId = setInterval(tickTimer, 1000);
+  document.addEventListener('keydown', handleKeydown);
+}
+
+/* Atualiza o relógio uma vez por segundo (não faz nada em pausa ou fim) */
+function tickTimer(){
+  if(game.paused || game.ended) return;
+  const secs = Math.floor((Date.now()-game.startTime)/1000);
+  document.getElementById('timeDisplay').textContent = formatTime(secs);
+}
+
+/* Converte segundos em MM:SS */
+function formatTime(s){
+  const m = Math.floor(s/60).toString().padStart(2,'0');
+  const ss = (s%60).toString().padStart(2,'0');
+  return `${m}:${ss}`;
+}
+
+/* Desenha o tabuleiro: primeiro as casas, depois as peças.
+   Cada casa guarda suas coordenadas em data-x e data-y. */
+function renderGrid(){
+  const pd = PHASE_DATA[game.phaseId];
+  const gridEl = document.getElementById('grid');
+  const cols = game.grid[0].length, rows = game.grid.length;
+
+  gridEl.style.gridTemplateColumns = `repeat(${cols}, ${TILE_SIZE}px)`;
+  gridEl.style.gridTemplateRows = `repeat(${rows}, ${TILE_SIZE}px)`;
+  gridEl.innerHTML = '';
+
+  for(let y=0;y<rows;y++){
+    for(let x=0;x<cols;x++){
+      const ch = game.grid[y][x];
+      const tile = document.createElement('div');
+      tile.style.width = TILE_SIZE+'px'; tile.style.height = TILE_SIZE+'px';
+      tile.dataset.x=x; tile.dataset.y=y;
+      tile.className = 'tile ' + tileClass(ch);
+      tile.textContent = tileEmoji(ch, pd);
+      gridEl.appendChild(tile);
+    }
+  }
+
+  // Peça de cada jogador por cima das casas (posição em pixels, com 5px de folga)
+  game.players.forEach(p=>{
+    const tok = document.createElement('div');
+    tok.className='player-token'; tok.id='token-'+p.id;
+    tok.style.width=(TILE_SIZE-10)+'px'; tok.style.height=(TILE_SIZE-10)+'px';
+    tok.style.background=p.color;
+    tok.style.left=(p.x*TILE_SIZE+5)+'px'; tok.style.top=(p.y*TILE_SIZE+5)+'px';
+    tok.textContent=p.char.emoji;
+    gridEl.appendChild(tok);
+  });
+}
+
+/* Letra do mapa → classe CSS da casa */
+function tileClass(ch){
+  switch(ch){ case '#': return 'wall'; case '~': return 'hazard'; case 'B': return 'item'; case 'N': case 'M': return 'npc'; case 'E': return 'exit'; default: return 'path'; }
+}
+
+/* Letra do mapa → emoji da casa */
+function tileEmoji(ch, pd){
+  switch(ch){ case 'B': return pd.itemEmoji; case 'N': return pd.npc2.emoji; case 'M': return pd.npc1.emoji; case 'E': return '🚩'; default: return ''; }
+}
+
+/* Atualiza vidas, pontos e dicas */
+function renderHud(){
+  document.getElementById('livesDisplay').innerHTML = '❤️'.repeat(game.lives) + '🖤'.repeat(3-game.lives);
+  document.getElementById('scoreDisplay').textContent = game.score;
+  document.getElementById('hintCount').textContent = game.hints;
+  document.getElementById('hintBtn').disabled = game.hints<=0;
+}
+
+/* Monta a lista de objetivos da missão */
+function renderObjectives(){
+  const pd = PHASE_DATA[game.phaseId];
+  const o = game.objectives;
+
+  const items = [
+    ['item', `Encontrar: ${pd.itemName}`],
+    ['npc1', `Ajudar ${pd.npc1.name}`],
+    ['npc2', `Ajudar ${pd.npc2.name}`],
+    ['questions', 'Responder corretamente pelo menos 3 perguntas'],
+    ['arrived', 'Chegar ao ponto de encontro seguro'],
+  ];
+
+  const list = document.getElementById('objList');
+  list.innerHTML = items.map(([key,label])=>{
+    const done = o[key];
+    return `<li class="${done?'done':''}"><span class="obj-check">${done?'✓':''}</span>${label}</li>`;
+  }).join('');
+}
+
+/* Desenha a mochila com 8 espaços */
+function renderInventory(){
+  const row = document.getElementById('invRow'); row.innerHTML='';
+  for(let i=0;i<8;i++){
+    const slot = document.createElement('div'); slot.className='inv-slot';
+    slot.textContent = game.inventory[i] || '';
+    row.appendChild(slot);
+  }
+}
+
+/* Mensagem rápida no topo. good=true → verde; false → vermelho.
+   O clearTimeout evita que um aviso antigo apague o novo cedo demais. */
+function showToast(msg, good){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show' + (good? ' good':'');
+  clearTimeout(showToast._tid);
+  showToast._tid = setTimeout(()=>{ t.className='toast'; }, 2200);
+}
+
+
+/* 7. MOVIMENTO E INTERAÇÃO COM AS CASAS */
+
+/* Chamada a cada tecla pressionada durante a fase. Ignora o teclado se a
+   fase acabou, está pausada ou há um popup de pergunta aberto. */
+function handleKeydown(e){
+  if(!game || game.ended || game.paused) return;
+  if(document.getElementById('modalOverlay').classList.contains('active')) return;
+
+  const key = e.key;
+
+  const p1 = game.players.find(p=>p.controls==='arrows');
+  const p2 = game.players.find(p=>p.controls==='wasd');
+
+  let handled=false;
+
+  if(p1){
+    if(key==='ArrowUp'){ movePlayer(p1,0,-1); handled=true; }
+    if(key==='ArrowDown'){ movePlayer(p1,0,1); handled=true; }
+    if(key==='ArrowLeft'){ movePlayer(p1,-1,0); handled=true; }
+    if(key==='ArrowRight'){ movePlayer(p1,1,0); handled=true; }
+  }
+
+  if(p2){
+    if(key==='w'||key==='W'){ movePlayer(p2,0,-1); handled=true; }
+    if(key==='s'||key==='S'){ movePlayer(p2,0,1); handled=true; }
+    if(key==='a'||key==='A'){ movePlayer(p2,-1,0); handled=true; }
+    if(key==='d'||key==='D'){ movePlayer(p2,1,0); handled=true; }
+  }
+
+  // Impede as setas de rolar a página
+  if(handled) e.preventDefault();
+}
+
+/* Move um jogador uma casa. Bloqueia saída do mapa e paredes.
+   Guarda a posição anterior em lastX/lastY para o caso de erro. */
+function movePlayer(p, dx, dy){
+  const nx = p.x+dx, ny = p.y+dy;
+
+  if(ny<0||ny>=game.grid.length||nx<0||nx>=game.grid[0].length) return;
+
+  const ch = game.grid[ny][nx];
+  if(ch==='#') return;
+
+  p.lastX = p.x; p.lastY = p.y;
+  p.x = nx; p.y = ny;
+
+  const tok = document.getElementById('token-'+p.id);
+  tok.style.left=(nx*TILE_SIZE+5)+'px'; tok.style.top=(ny*TILE_SIZE+5)+'px';
+
+  handleTile(p, ch, nx, ny);
+}
+
+/* Decide o que acontece quando um jogador pisa em uma casa */
+function handleTile(p, ch, x, y){
+  const pd = PHASE_DATA[game.phaseId];
+
+  // ---- ITEM DA FASE: coleta, vai para a mochila, +50 pontos ----
+  if(ch==='B'){
+    game.grid[y][x] = '.';
+    const tileEl = document.querySelector(`.tile[data-x="${x}"][data-y="${y}"]`);
+    tileEl.className='tile path'; tileEl.textContent='';
+
+    game.objectives.item = true;
+    game.inventory.push(pd.itemEmoji);
+    game.score += 50;
+
+    renderInventory(); renderObjectives(); renderHud();
+    showToast(`${pd.itemName} encontrado! +50 pontos`, true);
+
+  // ---- ÁREA DE RISCO: acertar libera; errar tira vida e faz recuar ----
+  } else if(ch==='~'){
+    const tileEl = document.querySelector(`.tile[data-x="${x}"][data-y="${y}"]`);
+    if(tileEl.classList.contains('cleared')) return;
+
+    openQuizModal({
+      tag: pd.hazardName, dialogue: pd.hazardDialogue,
+      onResult:(correct)=>{
+        if(correct){ game.grid[y][x]='.'; tileEl.classList.add('cleared'); }
+        else { loseLife(); movePlayerBack(p); }
+      }
+    });
+
+  // ---- MORADOR: sempre marcado como ajudado; +200 se acertar, -1 vida se errar ----
+  } else if(ch==='N' || ch==='M'){
+    const key = ch==='N' ? 'npc2' : 'npc1';
+    if(game.objectives[key]) return;
+
+    const tileEl = document.querySelector(`.tile[data-x="${x}"][data-y="${y}"]`);
+    const npc = ch==='N' ? pd.npc2 : pd.npc1;
+
+    openQuizModal({
+      tag:'PEDIDO DE AJUDA',
+      dialogue: `${npc.name}: "Não sei bem o que fazer agora, será que você pode me ajudar a entender essa situação?"`,
+      onResult:(correct)=>{
+        game.objectives[key] = true;
+        tileEl.classList.add('helped');
+
+        if(correct){ game.score += 200; showToast(`Você ajudou ${npc.name}! +200 pontos`, true); }
+        else { loseLife(); showToast(`Você ajudou ${npc.name}, mas errou a pergunta.`, false); }
+
+        renderObjectives();
+      }
+    });
+
+  // ---- PONTO DE ENCONTRO ----
+  } else if(ch==='E'){
+    tryExit();
+  }
+}
+
+/* Devolve o jogador à casa anterior (após errar em área de risco) */
+function movePlayerBack(p){
+  p.x = p.lastX; p.y = p.lastY;
+  const tok = document.getElementById('token-'+p.id);
+  tok.style.left=(p.x*TILE_SIZE+5)+'px'; tok.style.top=(p.y*TILE_SIZE+5)+'px';
+}
+
+/* Tira uma vida e 50 pontos (sem ficar negativo). Zero vidas = derrota. */
+function loseLife(){
+  game.lives -= 1;
+  game.score = Math.max(0, game.score-50);
+  renderHud();
+  if(game.lives<=0) endGame(false);
+}
+
+/* Só permite sair depois de pegar o item e ajudar os dois moradores */
+function tryExit(){
+  const o = game.objectives;
+
+  if(o.item && o.npc1 && o.npc2){
+    o.arrived = true; renderObjectives();
+    game.score += 150;
+    endGame(true);
+  } else {
+    showToast('Complete os objetivos antes de partir para o ponto de encontro!', false);
+  }
+}
+
+
+/* 8. PERGUNTAS EDUCATIVAS */
+
+/* Pergunta aberta no momento e o que fazer depois da resposta */
+let modalState = null;
+
+/* Abre o popup com uma pergunta da fase atual.
+   tag: etiqueta do popup; dialogue: texto de contexto;
+   onResult: função chamada com true (acertou) ou false (errou). */
+function openQuizModal({tag, dialogue, onResult}){
+  const pd = PHASE_DATA[game.phaseId];
+
+  const qIdx = randomQuestion(pd.questions, game.usedQuestionIdx);
+  game.usedQuestionIdx.push(qIdx);
+
+  if(game.usedQuestionIdx.length>=pd.questions.length) game.usedQuestionIdx=[];
+
+  const q = pd.questions[qIdx];
+  modalState = {q, onResult, answered:false};
+
+  document.getElementById('modalTag').textContent = tag;
+
+  const dlgEl = document.getElementById('modalDialogue');
+  if(dialogue){ dlgEl.style.display='block'; dlgEl.textContent = dialogue; } else { dlgEl.style.display='none'; }
+
+  document.getElementById('modalQuestion').textContent = q.q;
+
+  const optsEl = document.getElementById('modalOptions'); optsEl.innerHTML='';
+  q.opts.forEach((opt,i)=>{
+    const b = document.createElement('button'); b.className='opt-btn'; b.textContent = opt;
+    b.onclick = ()=>answerQuiz(i);
+    optsEl.appendChild(b);
+  });
+
+  const fb = document.getElementById('modalFeedback'); fb.className='feedback'; fb.textContent='';
+  const cont = document.getElementById('modalContinueBtn'); cont.className='modal-continue'; cont.onclick = closeQuizModal;
+
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+/* Processa a alternativa escolhida. A explicação aparece sempre. */
+function answerQuiz(i){
+  if(modalState.answered) return;
+  modalState.answered = true;
+
+  const q = modalState.q;
+  const correct = i===q.correct;
+
+  document.querySelectorAll('.opt-btn').forEach((b,idx)=>{
+    b.disabled = true;
+    if(idx===q.correct) b.classList.add('correct');
+    else if(idx===i && !correct) b.classList.add('wrong');
+  });
+
+  const fb = document.getElementById('modalFeedback');
+  fb.textContent = (correct? 'Correto! ' : 'Resposta incorreta. ') + q.exp;
+  fb.className = 'feedback show ' + (correct? 'good':'bad');
+
+  document.getElementById('modalContinueBtn').className='modal-continue show';
+
+  if(correct){ game.correctCount++; game.score += 100; } else { game.wrongCount++; }
+
+  if(game.correctCount>=3) game.objectives.questions = true;
+
+  renderHud();
+  modalState._correct = correct;
+}
+
+/* Fecha o popup e só então executa a consequência da resposta */
+function closeQuizModal(){
+  document.getElementById('modalOverlay').classList.remove('active');
+
+  const cb = modalState.onResult; const correct = modalState._correct; modalState = null;
+
+  if(cb) cb(correct);
+  renderObjectives(); renderHud();
+}
+
+
+/* 9. DICAS, PAUSA E FIM DE FASE */
+
+/* Mostra a próxima dica (em ordem). Cada dica custa 25 pontos. */
+function useHint(){
+  if(!game || game.hints<=0) return;
+
+  const pd = PHASE_DATA[game.phaseId];
+  game.hints--; game.score = Math.max(0, game.score-25);
+
+  const tip = pd.hints[pd.hints.length - 1 - game.hints] || pd.hints[pd.hints.length-1];
+  showToast('💡 '+tip, true);
+
+  renderHud();
+}
+
+/* Pausa: cronômetro e teclado verificam "paused" */
+function pauseGame(){ game.paused = true; document.getElementById('pauseOverlay').classList.add('active'); }
+
+/* Retoma a partida */
+function resumeGame(){ game.paused = false; document.getElementById('pauseOverlay').classList.remove('active'); }
+
+/* Recomeça a fase. Desliga antes o cronômetro e o teclado antigos, para
+   não acumular vários cronômetros nem mover o personagem várias vezes. */
+function restartPhase(){
+  document.getElementById('pauseOverlay').classList.remove('active');
+  if(game && game.timerId) clearInterval(game.timerId);
+  document.removeEventListener('keydown', handleKeydown);
+  startGameplay();
+}
+
+/* Encerra a fase em vitória (true) ou derrota (false) */
+function endGame(success){
+  game.ended = true;
+  clearInterval(game.timerId);
+  document.removeEventListener('keydown', handleKeydown);
+
+  const secs = Math.floor((Date.now()-game.startTime)/1000);
+  const pd = PHASE_DATA[game.phaseId];
+
+  if(!success){ go('screen-over'); return; }
+
+  // Registra a fase como concluída (libera a próxima no mapa)
+  state.completedPhases[game.phaseId] = { score: game.score };
+
+  // Conquistas: cada uma só é concedida uma vez
+  const newAchv = [];
+  if(!state.achievements['first_escape']){ state.achievements['first_escape']=true; newAchv.push('Primeiro Escape'); }
+  if(game.lives===3 && !state.achievements['no_errors']){ state.achievements['no_errors']=true; newAchv.push('Sem Erros'); }
+  if(game.objectives.npc1 && game.objectives.npc2 && !state.achievements['community_hero']){ state.achievements['community_hero']=true; newAchv.push('Herói da Comunidade'); }
+  if(game.correctCount>=5 && !state.achievements['flood_expert']){ state.achievements['flood_expert']=true; newAchv.push('Conhecimento Salva'); }
+  if(Object.keys(state.completedPhases).length>=PHASE_ORDER.length && !state.achievements['all_phases']){ state.achievements['all_phases']=true; newAchv.push('Guardião da Natureza'); }
+
+  document.getElementById('resTitle').textContent = `🎉 ${pd.name} — Missão Concluída!`;
+  document.getElementById('resScore').textContent = game.score;
+  document.getElementById('resQuestions').textContent = `${game.correctCount}/${game.correctCount+game.wrongCount}`;
+  document.getElementById('resLives').textContent = '❤️'.repeat(game.lives) + '🖤'.repeat(3-game.lives);
+  document.getElementById('resTime').textContent = formatTime(secs);
+
+  document.getElementById('resLearned').textContent = pd.resultLearned;
+
+  // Uma estrela para cada vida restante
+  const stars = game.lives===3 ? '⭐⭐⭐' : game.lives===2 ? '⭐⭐' : '⭐';
+  document.getElementById('starsDisplay').textContent = stars;
+
+  document.getElementById('resAchv').innerHTML = newAchv.map(a=>`<span class="achv-pill">🏅 ${a}</span>`).join('') || '<span style="opacity:0.6;font-size:0.85rem;">Nenhuma conquista nova desta vez.</span>';
+
+  applyPhaseTheme(game.phaseId, 'screen-results');
+  go('screen-results');
+}
+
+
+/* 10. CONQUISTAS
+   As condições de desbloqueio ficam em endGame(). */
+const ACHV_DEFS = [
+  {id:'first_escape', icon:'🏅', name:'Primeiro Escape', desc:'Complete sua primeira fase.'},
+  {id:'no_errors', icon:'🎯', name:'Sem Erros', desc:'Termine uma fase sem perder vidas.'},
+  {id:'community_hero', icon:'🤝', name:'Herói da Comunidade', desc:'Ajude todos os personagens de uma fase.'},
+  {id:'flood_expert', icon:'🧠', name:'Conhecimento Salva', desc:'Acerte 5 ou mais perguntas em uma única fase.'},
+  {id:'all_phases', icon:'🌎', name:'Guardião da Natureza', desc:'Complete todas as fases do jogo.'},
+];
+
+/* Conquistas não obtidas ficam com a classe "locked", mas visíveis */
+function renderAchievements(){
+  const grid = document.getElementById('achvGrid');
+  grid.innerHTML = ACHV_DEFS.map(a=>{
+    const unlocked = !!state.achievements[a.id];
+    return `<div class="achv-card ${unlocked?'':'locked'}"><span class="a-icon">${a.icon}</span><h4>${a.name}</h4><p>${a.desc}</p></div>`;
+  }).join('');
+}
+
+
+/* 11. MODO APRENDER
+   Dois níveis na mesma tela: lista dos 6 desastres e conteúdo de cada um. */
+
+/* Nível 1: lista dos desastres */
+function openLearnList(){
+  go('screen-learn');
+  document.getElementById('learnTitle').textContent = 'Aprender';
+
+  document.getElementById('learnBackBtn').onclick = ()=>go('screen-title');
+
+  const wrap = document.getElementById('learnContent');
+  wrap.innerHTML = `<div class="learn-node-grid">${PHASE_ORDER.map(id=>{
+    const p = PHASE_DATA[id];
+    return `<div class="learn-node"><span class="emoji">${p.mapEmoji}</span><h4>${p.name}</h4><button onclick="openLearnDetail('${id}')">Estudar</button></div>`;
+  }).join('')}</div>`;
+}
+
+/* Nível 2: conteúdo completo de um desastre */
+function openLearnDetail(id){
+  const p = PHASE_DATA[id];
+
+  document.getElementById('learnTitle').textContent = `Aprender: ${p.name}`;
+
+  // Aqui o "Voltar" retorna para a lista, e não para o menu
+  document.getElementById('learnBackBtn').onclick = openLearnList;
+
+  const wrap = document.getElementById('learnContent');
+  wrap.innerHTML = p.learn.map(section=>`<div class="learn-card"><h3>${section.t}</h3><p>${section.p}</p></div>`).join('')
+    + `<div class="learn-quiz-cta"><button onclick="go('screen-players')">Testar meus conhecimentos jogando esta fase</button></div>`;
+}
+</script>
+</body>
+</html>
